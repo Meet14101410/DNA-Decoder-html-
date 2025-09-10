@@ -1,0 +1,244 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DNA Decoder — Interactive Game</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#6ee7b7;--muted:#94a3b8;--glass:rgba(255,255,255,0.04)}
+    *{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#071021 0%,#071827 60%);color:#e6eef6}
+    .wrap{max-width:980px;margin:36px auto;padding:20px}
+    header{display:flex;align-items:center;gap:16px}
+    header h1{font-size:20px;margin:0}
+    .card{background:var(--card);border-radius:12px;padding:18px;margin-top:16px;box-shadow:0 6px 20px rgba(2,6,23,0.6)}
+
+    .board{display:grid;grid-template-columns:1fr 320px;gap:18px}
+    @media (max-width:880px){.board{grid-template-columns:1fr;}}
+
+    .target-area{padding:12px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);}
+    .target-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+    .slot{width:56px;height:56px;border-radius:8px;background:var(--glass);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px;user-select:none;border:2px dashed rgba(255,255,255,0.06)}
+    .slot.filled{border-style:solid}
+    .slot.correct{outline:3px solid rgba(110,231,183,0.18);box-shadow:0 6px 18px rgba(110,231,183,0.06) inset}
+    .slot.wrong{outline:3px solid rgba(255,118,117,0.12)}
+
+    .bases{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    .base{width:56px;height:56px;border-radius:8px;background:rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;cursor:pointer;user-select:none}
+    .base:active{transform:translateY(1px)}
+
+    .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+    button{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 12px;border-radius:8px;color:inherit;cursor:pointer}
+    button.primary{background:linear-gradient(90deg,var(--accent),#34d399);color:#052018;border:none}
+
+    .hud{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .muted{color:var(--muted);font-size:13px}
+
+    .right-col{display:flex;flex-direction:column;gap:12px}
+    .history{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+
+    .log-item{background:rgba(255,255,255,0.02);padding:8px;border-radius:8px;font-size:14px}
+
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+
+    /* drag ghost */
+    .dragging{opacity:0.5}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>DNA Decoder</h1>
+      <div class="muted">Build the complementary strand. A ↔ T, C ↔ G</div>
+    </header>
+
+    <div class="card board" role="application" aria-label="DNA Decoder game">
+      <section>
+        <div class="target-area">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <strong>Target Sequence</strong>
+              <div class="muted">Place the complementary bases into slots below</div>
+            </div>
+            <div class="hud">
+              <div class="muted">Level <span id="level">1</span></div>
+              <div class="muted">Score <span id="score">0</span></div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px" id="targetRow" class="target-row" aria-live="polite"></div>
+
+          <div style="margin-top:18px">
+            <strong>Your Strand</strong>
+            <div class="muted">Drag or click bases to place them in order</div>
+            <div id="slotRow" class="target-row" style="margin-top:10px"></div>
+          </div>
+
+          <div class="bases" id="baseBank" aria-label="Base bank" style="margin-top:14px"></div>
+
+          <div class="controls">
+            <button id="checkBtn" class="primary">Check</button>
+            <button id="hintBtn">Hint</button>
+            <button id="shuffleBtn">Shuffle Bases</button>
+            <button id="newBtn">New Game</button>
+            <div class="muted" id="message" style="margin-left:6px"></div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px" class="muted">Tip: Click a base then click a slot to place. Click a filled slot to clear it.</div>
+      </section>
+
+      <aside class="right-col">
+        <div class="card" style="padding:12px;">
+          <strong>How it works</strong>
+          <p class="muted" style="margin:8px 0 0 0">You are shown a target DNA strand (5' → 3'). Build the complementary strand (3' → 5') using base pairing rules: A ↔ T, C ↔ G. Complete correctly to score points and advance levels.</p>
+        </div>
+
+        <div class="card" style="padding:12px;">
+          <strong>History</strong>
+          <div class="history" id="history"></div>
+        </div>
+
+        <div class="card" style="padding:12px;">
+          <strong>Controls</strong>
+          <div class="muted" style="margin-top:8px">Check: validate your answer. Hint: reveals one correct base. Shuffle: randomize base bank. New Game: generates a new target sequence.</div>
+        </div>
+      </aside>
+    </div>
+
+    <footer>Made for quick learning — feel free to tweak the length, timing, or visuals.</footer>
+  </div>
+
+  <script>
+    // Game logic
+    const basePairs = { A: 'T', T: 'A', C: 'G', G: 'C' }
+    let target = []
+    let user = []
+    let level = 1
+    let score = 0
+
+    const targetRow = document.getElementById('targetRow')
+    const slotRow = document.getElementById('slotRow')
+    const baseBank = document.getElementById('baseBank')
+    const checkBtn = document.getElementById('checkBtn')
+    const hintBtn = document.getElementById('hintBtn')
+    const shuffleBtn = document.getElementById('shuffleBtn')
+    const newBtn = document.getElementById('newBtn')
+    const message = document.getElementById('message')
+    const historyEl = document.getElementById('history')
+    const levelEl = document.getElementById('level')
+    const scoreEl = document.getElementById('score')
+
+    function randBase(){const b = ['A','T','C','G']; return b[Math.floor(Math.random()*4)]}
+
+    function generateTarget(len){
+      const arr = []
+      for(let i=0;i<len;i++) arr.push(randBase())
+      return arr
+    }
+
+    function render(){
+      targetRow.innerHTML = ''
+      slotRow.innerHTML = ''
+      baseBank.innerHTML = ''
+
+      target.forEach((b,i)=>{
+        const el = document.createElement('div')
+        el.className = 'slot'
+        el.textContent = b
+        el.setAttribute('aria-label', `Target base ${i+1} ${b}`)
+        targetRow.appendChild(el)
+      })
+
+      user.forEach((b,i)=>{
+        const s = document.createElement('div')
+        s.className = 'slot'+(b? ' filled':'')
+        s.dataset.index = i
+        s.draggable = true
+        s.addEventListener('dragstart', dragStart)
+        s.addEventListener('dragover', dragOver)
+        s.addEventListener('drop', dropOnSlot)
+        s.addEventListener('click', ()=>{ if(s.textContent) { log(`Cleared slot ${i+1}`); user[i]=null; render() } })
+        s.textContent = b||''
+        slotRow.appendChild(s)
+      })
+
+      // Create base bank - provide extra copies so user can choose
+      const pool = buildPool()
+      pool.forEach((b,idx)=>{
+        const el = document.createElement('div')
+        el.className = 'base'
+        el.textContent = b
+        el.setAttribute('draggable','true')
+        el.dataset.base = b
+        el.addEventListener('dragstart', dragBase)
+        el.addEventListener('click', ()=>placeNext(b))
+        baseBank.appendChild(el)
+      })
+
+      levelEl.textContent = level
+      scoreEl.textContent = score
+    }
+
+    function buildPool(){
+      // include more copies than needed to allow choices
+      const pool = []
+      const counts = {A:0,T:0,C:0,G:0}
+      target.forEach(b=>counts[basePairs[b]]++) // prefer providing complementary bases
+      // Add complementary bases
+      Object.keys(counts).forEach(k=>{
+        for(let i=0;i<counts[k]+1;i++) pool.push(k)
+      })
+      // add random extras
+      for(let i=0;i<Math.max(3,target.length-3);i++) pool.push(randBase())
+      // shuffle
+      for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]]}
+      return pool
+    }
+
+    function placeNext(base){
+      const idx = user.indexOf(null)
+      if(idx===-1){message.textContent='All slots filled — click a slot to clear or press Check.';setTimeout(()=>message.textContent='',1800);return}
+      user[idx]=base
+      render()
+    }
+
+    function checkAnswer(){
+      let correct = true
+      const results = []
+      for(let i=0;i<target.length;i++){
+        const expected = basePairs[target[i]]
+        const got = user[i]
+        results.push(got===expected)
+        if(got!==expected) correct=false
+      }
+
+      // Visual feedback
+      const slotEls = slotRow.querySelectorAll('.slot')
+      slotEls.forEach((el,i)=>{
+        el.classList.remove('correct','wrong')
+        if(user[i]) el.classList.add(results[i]? 'correct':'wrong')
+      })
+
+      if(correct){
+        const earned = level * 10
+        score += earned
+        log(`Correct! +${earned} points`)
+        level++
+        message.textContent = 'Correct — nice! New target generated.'
+        setTimeout(()=>{message.textContent=''; newRound()},900)
+      } else {
+        log('Some bases are incorrect. Try again or use a hint.')
+        message.textContent = 'Some positions are incorrect.'
+        setTimeout(()=>message.textContent='',2200)
+      }
+
+      scoreEl.textContent = score
+    }
+
+    function hint(){
+      // reveal one wrong or empty base
+      for(let i=0;i<target.length;i++){
+        const expe
