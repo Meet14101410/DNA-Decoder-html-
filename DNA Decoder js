@@ -1,0 +1,14 @@
+/*
+DNA Decoder — JavaScript
+
+Features:
+- validateDNA(sequence): checks for valid nucleotides (A, T, C, G)
+- toRNA(sequence): converts DNA to RNA (T -> U)
+- complement(sequence): returns complement (A<->T, C<->G)
+- reverseComplement(sequence): reverse complement of DNA
+- translate(sequence, frame = 0, stopOnStopCodon = true): translates DNA (or RNA) into amino acids using standard codon table
+- prettyPrintProtein(codonSeq): formats protein output
+
+Usage examples at the bottom.
+
+This
